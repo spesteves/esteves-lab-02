@@ -1,0 +1,260 @@
+---
+title: "9041 Assignment 2"
+author: Selena Esteves
+date: today
+format: 
+    html:
+      toc: true
+      code-fold: true
+      code-summary: "Show code"
+      df-print: paged
+execute:
+    echo: false
+    warning: false
+---
+
+```{r, load libraries}
+#| output: FALSE
+# Output false ensures your reproducible document does not show all of your code!
+
+# Remember to install packages you do not already have
+
+library(tidyverse)
+library(readxl)
+library(psych)
+library(gt)
+library(janitor)
+```
+
+```{r}
+#| output: FALSE
+
+# Load data
+data<-read_excel("./Attachment_Anxiety_Data.xlsx")
+
+
+# Inspect data for the big five dataset
+head(data)
+```
+
+```{r, clean data}
+#| output: FALSE
+
+# Use mutate to rename variables in a meaningful way - such that those assigned gender value 1 in the dataset are listed as Male and those assigned gender value of 2 are listed as Female. Do the same for education values
+# Extract for only variables age, Gender, education, and big five values
+# Mutate to convert bfi values to integers
+
+data.clean <- data |>
+    mutate(Gender = case_when(Gender==1 ~ "Male", Gender==2 ~"Female", TRUE ~ "NA")) |> 
+    mutate(Relationship = case_when(Relationship==1 ~ "Married", Relationship==2 ~ "In a Relationship", Relationship==4 ~ "Divorced", Relationship==5 ~ "In a Relationship", Relationship==6 ~ "Never been in a Relationship", Relationship==7 ~ "Prefer not to say",TRUE ~ "NA")) |> 
+    select(Gender, Relationship, SA_1:SEst_10) |>
+    mutate_at(3:41, as.integer)
+
+```
+
+```{r, score items}
+#| output: FALSE
+
+# Answer key: which items belong to each subscale.
+# "-" marks reverse-coded items (e.g., E1 "Don't talk a lot" -> high = LESS extraverted), which get flipped so higher scores always mean more of the trait.
+
+keys_SIAS<- list(Social_Interaction_Anxiety_Scale=c("SA_1", "SA_2", "SA_3", "SA_4", "-SA_5", "SA_6",
+                                                       "SA_7", "SA_8", "-SA_9", "SA_10", "-SA_11", "SA_12",
+                                                       "SA_13", "SA_14", "SA_15", "SA_16", "SA_17",
+                                                       "SA_18", "SA_19", "SA_20"))
+keys_ECRS<- list(Experiences_in_Close_Relationships_Scale=c("AA_1", "AA_2", "AA_3", "AA_4", "AA_5", 
+                                                          "AA_6", "AA_7", "AA_8", "AA_9"))
+keys_RSE<- list(Rosenberg_SelfEsteem_Scale = c("SEst_1", "-SEst_2", "SEst_3", "SEst_4", "-SEst_5", 
+                                               "-SEst_6","SEst_7", "-SEst_8", "-SEst_9", "SEst_10"))
+
+
+# Average items per person, and compute Cronbach's alpha.
+# Returns $scores (per-person scores as averages since we set totals to F) and $alpha (reliability)
+scores_SIAS<-scoreItems(keys_SIAS, data.clean, totals = F, min=0, max=4)
+scores_ECRS<-scoreItems(keys_ECRS, data.clean, totals = F, min=1, max=7)
+scores_RSE<-scoreItems(keys_RSE, data.clean, totals = F, min=1, max=4)
+
+
+# Turn this into a dataframe!
+scores_SIAS.df<-as.data.frame(scores_SIAS$scores)
+scores_ECRS.df <- as.data.frame(scores_ECRS$scores)
+scores_RSE.df <- as.data.frame(scores_RSE$scores)
+
+# Combine data frame
+allscores.df <- cbind(scores_SIAS.df, scores_ECRS.df, scores_RSE.df)
+
+```
+
+```{r, combine data frames}
+#| output: FALSE
+
+# Combine the original data set with the new scores dataframe
+total.clean<-cbind(data.clean, allscores.df)
+
+# Inspect new data set
+head(total.clean)
+```
+
+```{r, reduced data}
+#| output: FALSE
+
+# Select only for the columns which you want to appear in your final data table
+total.final<- total.clean |>
+    select("Gender", "Relationship", "Social_Interaction_Anxiety_Scale", "Experiences_in_Close_Relationships_Scale", "Rosenberg_SelfEsteem_Scale") |>
+    mutate_if(is.numeric, round, 2)
+```
+
+```{r, reproducible table for education distribution}
+#| output: FALSE
+
+# Create a demographics table of education by gender
+demographictable <- total.final |>
+  tabyl(Relationship, Gender)
+
+# Create your reproducible gt table
+gttable.1 <- demographictable |>
+  gt() |>
+  tab_header(
+    title = md("*Distribution of Males and Females by Education Level*")
+  )
+
+```
+
+```{r, reproducible table for big five scores}
+#| output: FALSE
+
+# Combine the three Cronbach's alpha values and round them to 2 decimal places.
+alphas <- round(c(
+  scores_SIAS$alpha,
+  scores_ECRS$alpha,
+  scores_RSE$alpha
+), 2)
+
+# Summary statistics for certain columns
+summary <- describe(select(total.final, Social_Interaction_Anxiety_Scale:Rosenberg_SelfEsteem_Scale))
+summary
+
+# Label sample size for later in your reproducible document using describe
+n <- (describe(total.final))[1,2]
+
+# Name an object of Subscales so this can appear in your table
+Scales <- c("Social_Interaction_Anxiety_Scale", "Experiences_in_Close_Relationships_Scale", "Rosenberg_SelfEsteem_Scale")
+
+# Create a column called Subscales in your summary table
+summary$Scales<- Scales
+
+
+# Select for only the columns which you want to appear in your final table
+summary <- summary |>
+    select(Scales, mean, median, sd, range) |>
+       mutate_if(is.numeric, round, 2)
+
+# Combine summary information with alpha values
+final.reptable <- cbind(summary, alphas)
+
+# Create a reproducible table
+gttable.2<- gt(final.reptable) |>
+    tab_header(
+        title = md("*Descriptive Statistics for the Attachment and SociaL Anxiety Scales*")) |>
+    tab_stubhead(label= "Composites")|>
+    tab_spanner(
+        label="Central Tendency",
+        columns = c(mean, median)
+    )|>
+        tab_spanner(
+        label="Variability",
+        columns = c(sd, range)
+        )|>
+            tab_spanner(
+        label="Reliability Values (Chronbach's alpha)",
+        columns = c(alphas)
+            ) 
+
+```
+
+```{r, filtered dataset}
+#| output: FALSE
+
+# Use filter to extract only those participants who are over 18 and under 65
+
+total.filtered <- total.clean |>
+    filter(Relationship == "Married" | Relationship == "In a Relationship")
+
+# Checking that age restriction worked
+table(total.filtered$Relationship) 
+```
+
+```{r, reproducible FILTERED table for big five scores}
+#| output: FALSE
+
+# Combine the three Cronbach's alpha values and round them to 2 decimal places.
+alphas_filtered <- round(c(
+  scores_SIAS$alpha,
+  scores_ECRS$alpha,
+  scores_RSE$alpha
+), 2)
+
+# Summary statistics for certain columns
+summary_filtered <- describe(select(total.filtered,Social_Interaction_Anxiety_Scale:Rosenberg_SelfEsteem_Scale ))
+summary_filtered
+
+# Name an object of Subscales so this can appear in your table
+Scales <- c("Social_Interaction_Anxiety_Scale", "Experiences_in_Close_Relationships_Scale", "Rosenberg_SelfEsteem_Scale")
+
+#Create a column called Subscales in your summary table
+summary_filtered$Scales<- Scales
+
+# Select for only the columns which you want to appear in your final table
+summary_filtered <- summary_filtered |>
+    select(Scales, mean, median, sd, range) |>
+       mutate_if(is.numeric, round, 2)
+
+# Combine summary information with alpha values
+filtered.reptable <- cbind(summary_filtered, alphas_filtered)
+
+# Create a reproducible table
+gttable.3<- gt(filtered.reptable) |>
+    tab_header(
+        title = md("*Descriptive Statistics for the Attachment and Social Anxiety Scales in people Married or In a Relationship*")) |>
+    tab_stubhead(label= "Composites")|>
+    tab_spanner(
+        label="Central Tendency",
+        columns = c(mean, median)
+    )|>
+        tab_spanner(
+        label="Variability",
+        columns = c(sd, range)
+        )|>
+            tab_spanner(
+        label="Reliability Values (Chronbach's alpha)",
+        columns = c(alphas_filtered)
+            ) 
+```
+## Intro
+
+## Methods
+
+### Participants
+
+In this data set there were `{r} n` participants, with varying distributions of education type (Table 1).
+
+`{r} gttable.1`
+
+### Measures
+
+In this attachment and social anxiety data set, the 3 scales refer to the .... SIAS (Cronbach's alpha = `{r} alphas[1]`). ECRS (Cronbach's alpha = `{r} alphas[2]`), RES (Cronbach's alpha = `{r} alphas[3]`). 
+
+### Data Analysis Strategy
+
+The data for variables xyz were reverse keyed.
+
+## Results
+
+`{r} gttable.2`
+In this attachment and social anxiety data set, participants had a mean score on SIAS of `{r} final.reptable[1,2]`, on ECRS of `{r} final.reptable[2,2]`, on RES of `{r} final.reptable[3,2]`.
+
+`{r} gttable.3`
+When only including participants married or in a relationship, this attachment and social anxiety data set, the 3 scales refer to the 3 composites included in the scales. Participants had a mean score on SIAS of `{r} filtered.reptable[1,2]`, on ECRS of `{r} filtered.reptable[2,2]`, on RES of `{r} filtered.reptable[3,2]`.
+
+## Discussion
+
