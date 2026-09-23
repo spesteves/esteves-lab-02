@@ -1,6 +1,10 @@
 ---
 title: "9041 Assignment 2"
+<<<<<<< HEAD
 author: Selena Esteves
+=======
+author: Selena
+>>>>>>> 7d443b0 (Final Doc)
 date: today
 format: 
     html:
